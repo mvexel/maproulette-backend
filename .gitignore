@@ -23,4 +23,6 @@ project/sbt-ui.sbt
 .DS_Store
 conf/generated.routes
 .bsp/
-
+.metals/
+.bloop/
+metals.sbt
