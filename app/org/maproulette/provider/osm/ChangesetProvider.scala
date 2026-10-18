@@ -127,7 +127,10 @@ class ChangesetProvider @Inject() (
                 this.closeChangeset(changesetId, accessToken)
                 p failure f
             }
-          case Failure(f) => p failure f
+          case Failure(f) =>
+            // Never leave the new changeset open when the change could not be built.
+            this.closeChangeset(changesetId, accessToken)
+            p failure f
         }
       case Failure(f) => p failure f
     }
