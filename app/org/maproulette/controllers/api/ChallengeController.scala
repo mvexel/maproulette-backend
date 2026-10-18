@@ -1557,7 +1557,8 @@ class ChallengeController @Inject() (
       lineByLine: Boolean,
       removeUnmatched: Boolean,
       dataOriginDate: Option[String] = None,
-      skipSnapshot: Boolean = false
+      skipSnapshot: Boolean = false,
+      report: Boolean = false
   ): Action[MultipartFormData[Files.TemporaryFile]] =
     Action.async(parse.multipartFormData) { implicit request =>
       {
@@ -1582,6 +1583,8 @@ class ChallengeController @Inject() (
                 this.snapshotManager.recordChallengeSnapshot(challengeId)
               }
 
+              if (report && !lineByLine)
+                throw new InvalidException("report=true needs lineByLine=true")
               request.body.file("json") match {
                 case Some(f) if StringUtils.isNotEmpty(f.filename) =>
                   if (removeUnmatched) {
@@ -1589,8 +1592,9 @@ class ChallengeController @Inject() (
                   }
 
                   // todo this should probably be streamed instead of all pulled into memory
-                  val sourceData       = Source.fromFile(f.ref.getAbsoluteFile).getLines()
-                  val sourceDataLength = Source.fromFile(f.ref.getAbsoluteFile).getLines().length
+                  val sourceData                     = Source.fromFile(f.ref.getAbsoluteFile).getLines()
+                  var reportResult: Option[JsObject] = None
+                  val sourceDataLength               = Source.fromFile(f.ref.getAbsoluteFile).getLines().length
                   if (lineByLine) {
                     val total = currentTaskCount + sourceDataLength;
                     if (total > config.maxTasksPerChallenge) {
@@ -1602,7 +1606,11 @@ class ChallengeController @Inject() (
                         config.maxTasksPerChallenge
                       )
 
-                      if (currentTaskCount == 0) {
+                      if (report) {
+                        throw new InvalidException(
+                          s"Total challenge tasks would exceed cap of ${config.maxTasksPerChallenge}"
+                        )
+                      } else if (currentTaskCount == 0) {
                         val statusMessage =
                           s"Tasks were not accepted. Your total challenge tasks would exceed the ${config.maxTasksPerChallenge} cap."
                         dalManager.challenge.update(
@@ -1621,6 +1629,8 @@ class ChallengeController @Inject() (
                           s"Total challenge tasks would exceed cap of ${config.maxTasksPerChallenge}"
                         )
                       }
+                    } else if (report) {
+                      reportResult = Some(this.addReportedLines(user, c, sourceData))
                     } else {
                       sourceData.foreach(challengeProvider.createTaskFromJson(user, c, _))
                     }
@@ -1639,7 +1649,7 @@ class ChallengeController @Inject() (
                       )
                     case _ => // do nothing
                   }
-                  NoContent
+                  reportResult.map(Ok(_)).getOrElse(NoContent)
                 case _ =>
                   throw new InvalidException(s"No json uploaded with request to add tasks from")
               }
@@ -1649,6 +1659,36 @@ class ChallengeController @Inject() (
         }
       }
     }
+
+  /**
+    * Line-by-line ingest with per-line results (opt-in `report=true`). A rejected line does not
+    * fail the challenge; accepted lines stay. Lines are numbered from 1; blank lines are skipped.
+    */
+  private def addReportedLines(
+      user: User,
+      challenge: Challenge,
+      lines: Iterator[String]
+  ): JsObject = {
+    var created  = 0
+    var updated  = 0
+    var count    = dalManager.challenge.getTaskCount(challenge.id)
+    val rejected = scala.collection.mutable.ListBuffer[JsObject]()
+    lines.zipWithIndex.foreach {
+      case (line, index) if line.trim.nonEmpty =>
+        val errors = scala.collection.mutable.ListBuffer[String]()
+        val task   = challengeProvider.createTaskFromJson(user, challenge, line, Some(errors))
+        if (task.isEmpty || errors.nonEmpty) {
+          val reported = if (errors.isEmpty) List("Task was not created") else errors.toList
+          rejected += Json.obj("line" -> (index + 1), "errors" -> reported)
+        } else {
+          val after = dalManager.challenge.getTaskCount(challenge.id)
+          if (after > count) created += 1 else updated += 1
+          count = after
+        }
+      case _ => // blank line
+    }
+    Json.obj("created" -> created, "updated" -> updated, "rejected" -> rejected.toList)
+  }
 
   /**
     * Moves a challenge from one project to another. This requires admin access on both projects

@@ -655,4 +655,18 @@ class ChallengeProviderSpec extends PlaySpec with MockitoSugar with BeforeAndAft
         "Remote GeoJSON URL is not valid"
     }
   }
+
+  "createTaskFromJson" should {
+    "collect a rejected line's error instead of failing the challenge when reporting" in {
+      // challengeDAL is null here: marking the challenge FAILED would throw.
+      val errors = scala.collection.mutable.ListBuffer[String]()
+      repository.createTaskFromJson(
+        User.superUser,
+        challengeWithOsmId,
+        "{not json",
+        Some(errors)
+      ) mustEqual None
+      errors.size mustEqual 1
+    }
+  }
 }

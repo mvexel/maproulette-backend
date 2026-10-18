@@ -939,6 +939,11 @@ PUT     /challenge/:id/addTasks                     @org.maproulette.controllers
 #   - name: skipSnapshot
 #     in: query
 #     description: If included will skip recording a snapshot before proceeding. (By default false, so it will create snapshot.)
+#   - name: report
+#     in: query
+#     description: 'With lineByLine, return 200 with created and updated counts and the rejected
+#                  lines with their errors instead of 204. Rejected lines do not mark the challenge
+#                  FAILED.'
 # requestBody:
 #   description: The geojson to build the tasks from.
 #   required: true
@@ -947,7 +952,7 @@ PUT     /challenge/:id/addTasks                     @org.maproulette.controllers
 #       schema:
 #         type: object
 ###
-PUT     /challenge/:id/addFileTasks                 @org.maproulette.controllers.api.ChallengeController.addTasksToChallengeFromFile(id:Long, lineByLine:Boolean ?= true, removeUnmatched:Boolean ?= false, dataOriginDate:Option[String], skipSnapshot:Boolean ?= false)
+PUT     /challenge/:id/addFileTasks                 @org.maproulette.controllers.api.ChallengeController.addTasksToChallengeFromFile(id:Long, lineByLine:Boolean ?= true, removeUnmatched:Boolean ?= false, dataOriginDate:Option[String], skipSnapshot:Boolean ?= false, report:Boolean ?= false)
 ###
 # tags: [ Challenge ]
 # operationId: challenge_retrieves_children_for_challenge
