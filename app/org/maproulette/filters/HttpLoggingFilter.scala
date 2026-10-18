@@ -11,6 +11,19 @@ import play.api.routing.Router
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
+private[filters] object SafeRequestLog {
+  private val sensitiveHeaders = Set("authorization", "apikey", "cookie", "set-cookie", "referer")
+
+  def headers(request: RequestHeader): String =
+    request.headers.headers
+      .map {
+        case (key, value) =>
+          val sensitive = sensitiveHeaders.contains(key.toLowerCase(java.util.Locale.ROOT))
+          s"$key=${if (sensitive) "[redacted]" else value}"
+      }
+      .mkString("  ;; ")
+}
+
 /**
   * Filter to provide an http request log at the service side.
   */
@@ -49,9 +62,7 @@ class HttpLoggingFilter @Inject() (
         logger.trace(
           "Request {} Headers: {}",
           uuid,
-          requestHeader.headers.headers
-            .map({ case (k, v) => s"${k}=${v}" })
-            .mkString("  ;; ")
+          SafeRequestLog.headers(requestHeader)
         )
       }
 
