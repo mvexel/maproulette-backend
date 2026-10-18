@@ -848,6 +848,12 @@ class TaskDAL @Inject() (
             this.manager.challenge.updatePopularity(Instant.now().getEpochSecond())(task.parent)
           }
 
+          // The cached copy must carry the completion fields written above, or reads
+          // return the previous completed_by/mapped_on until the cache entry expires.
+          val mappedOn =
+            SQL"SELECT mapped_on FROM tasks WHERE id = ${task.id}"
+              .as(SqlParser.get[Option[DateTime]]("mapped_on").single)
+
           if (reviewNeeded) {
             // Let's note in the task_review_history table that this task needs review
             SQL"""INSERT INTO task_review_history (task_id, requested_by, review_status, reviewed_at)
@@ -863,6 +869,9 @@ class TaskDAL @Inject() (
                     reviewRequestedBy = Some(user.id)
                   ),
                   modified = new DateTime(),
+                  mappedOn = mappedOn,
+                  completedBy = Some(user.id),
+                  completedTimeSpent = completedTimeSpent,
                   completionResponses = completionResponses match {
                     case Some(r) => Some(r.toString())
                     case None    => None
@@ -880,6 +889,9 @@ class TaskDAL @Inject() (
                 task.copy(
                   status = Some(status),
                   modified = new DateTime(),
+                  mappedOn = mappedOn,
+                  completedBy = Some(user.id),
+                  completedTimeSpent = completedTimeSpent,
                   completionResponses = completionResponses match {
                     case Some(r) => Some(r.toString())
                     case None    => None

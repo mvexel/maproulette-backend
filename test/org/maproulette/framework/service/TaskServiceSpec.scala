@@ -42,6 +42,32 @@ class TaskServiceSpec(implicit val application: Application) extends FrameworkHe
       }
     }
 
+    "refresh cached completion fields after a status write" taggedAs (TaskTag) in {
+      Seq(false, true).foreach { requestReview =>
+        val task = this.taskDAL
+          .insert(
+            this.getTestTask(UUID.randomUUID().toString, this.defaultChallenge.id),
+            User.superUser
+          )
+        this.service.retrieve(task.id).get.completedBy mustEqual None
+        this.taskDAL.setTaskStatus(
+          List(task),
+          Task.STATUS_FIXED,
+          defaultUser,
+          Some(requestReview)
+        )
+        val cached = this.service.retrieve(task.id).get
+        this.taskDAL.cacheManager.cache.remove(task.id)
+        val stored = this.service.retrieve(task.id).get
+        cached.status mustEqual Some(Task.STATUS_FIXED)
+        cached.completedBy mustEqual Some(defaultUser.id)
+        cached.completedBy mustEqual stored.completedBy
+        cached.mappedOn.isDefined mustEqual true
+        cached.mappedOn.map(_.getMillis) mustEqual stored.mappedOn.map(_.getMillis)
+        cached.completedTimeSpent mustEqual stored.completedTimeSpent
+      }
+    }
+
     "retrieve list of tasks by id" taggedAs (TaskTag) in {
       val firstTask = this.taskDAL
         .insert(
