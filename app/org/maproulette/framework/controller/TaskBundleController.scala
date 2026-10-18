@@ -6,7 +6,7 @@
 package org.maproulette.framework.controller
 
 import javax.inject.Inject
-import org.maproulette.exception.{InvalidException, LockConflictException}
+import org.maproulette.exception.{ErrorCodes, InvalidException, LockConflictException}
 import org.maproulette.data._
 import org.maproulette.framework.model.{Task, TaskBundle, Tag, User}
 import org.maproulette.framework.service.{TaskBundleService, ServiceManager, TagService}
@@ -344,7 +344,8 @@ class TaskBundleController @Inject() (
         "lockedTaskId" -> conflictingTaskId,
         "parentName"   -> conflictingParentName,
         "bundledTasks" -> e.conflictingLock.bundledTasks,
-        "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString)
+        "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString),
+        "error"        -> ErrorCodes.LockedByOther
       )
     )
   }

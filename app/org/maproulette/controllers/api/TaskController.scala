@@ -13,6 +13,8 @@ import org.maproulette.Config
 import org.maproulette.controllers.CRUDController
 import org.maproulette.data._
 import org.maproulette.exception.{
+  CodedIllegalAccessException,
+  ErrorCodes,
   InvalidException,
   LockConflictException,
   LockedException,
@@ -48,7 +50,7 @@ import play.api.mvc._
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /**
   * The Task controller handles all operations for the Task objects.
@@ -227,7 +229,10 @@ class TaskController @Inject() (
       val task = this.dal.retrieveById(taskId) match {
         case Some(t) => t
         case None =>
-          throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+          throw new NotFoundException(
+            s"Task with $taskId not found, unable to lock.",
+            Some(ErrorCodes.NotFound)
+          )
       }
 
       val challenge = this.serviceManager.challenge.retrieve(task.parent) match {
@@ -246,7 +251,8 @@ class TaskController @Inject() (
 
       if (challenge.extra.paused) {
         throw new InvalidException(
-          "This challenge is currently paused. Tasks cannot be locked until it is resumed."
+          "This challenge is currently paused. Tasks cannot be locked until it is resumed.",
+          Some(ErrorCodes.ChallengePaused)
         )
       }
 
@@ -257,7 +263,10 @@ class TaskController @Inject() (
             case Some(user) => user.osmProfile.displayName
             case None       => lockerId
           }
-          throw new IllegalAccessException(s"Task is currently locked by user ${lockHolder}")
+          throw new CodedIllegalAccessException(
+            s"Task is currently locked by user ${lockHolder}",
+            ErrorCodes.LockedByOther
+          )
         }
 
         webSocketProvider.sendMessage(
@@ -293,7 +302,8 @@ class TaskController @Inject() (
         Ok(
           Json.toJson(task).as[JsObject] ++ Json.obj(
             "lockPrimaryTaskId" -> lockPrimaryTaskId,
-            "lockBundledTasks"  -> lockBundledTasks
+            "lockBundledTasks"  -> lockBundledTasks,
+            "expiresAt"         -> this.lockExpiresAt(task)
           )
         )
       } catch {
@@ -310,7 +320,8 @@ class TaskController @Inject() (
               "parentId"     -> conflictingParentId,
               "parentName"   -> conflictingParentName,
               "bundledTasks" -> e.conflictingLock.bundledTasks,
-              "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString)
+              "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString),
+              "error"        -> ErrorCodes.LockedByOther
             )
           )
       }
@@ -333,7 +344,10 @@ class TaskController @Inject() (
         val task = this.dal.retrieveById(taskId) match {
           case Some(t) => t
           case None =>
-            throw new NotFoundException(s"Task with $taskId not found, unable to lock.")
+            throw new NotFoundException(
+              s"Task with $taskId not found, unable to lock.",
+              Some(ErrorCodes.NotFound)
+            )
         }
 
         val challenge = this.serviceManager.challenge.retrieve(task.parent) match {
@@ -352,7 +366,8 @@ class TaskController @Inject() (
 
         if (challenge.extra.paused) {
           throw new InvalidException(
-            "This challenge is currently paused. Tasks cannot be locked until it is resumed."
+            "This challenge is currently paused. Tasks cannot be locked until it is resumed.",
+            Some(ErrorCodes.ChallengePaused)
           )
         }
 
@@ -363,7 +378,10 @@ class TaskController @Inject() (
               case Some(u) => u.osmProfile.displayName
               case None    => lockerId
             }
-            throw new IllegalAccessException(s"Task is currently locked by user ${lockHolder}")
+            throw new CodedIllegalAccessException(
+              s"Task is currently locked by user ${lockHolder}",
+              ErrorCodes.LockedByOther
+            )
           }
 
           val memberTasks = this.dal.retrieveListById(-1, 0)(taskIds)
@@ -379,7 +397,8 @@ class TaskController @Inject() (
           Ok(
             Json.obj(
               "lockPrimaryTaskId" -> task.id,
-              "lockBundledTasks"  -> taskIds
+              "lockBundledTasks"  -> taskIds,
+              "expiresAt"         -> this.lockExpiresAt(task)
             )
           )
         } catch {
@@ -396,7 +415,8 @@ class TaskController @Inject() (
                 "parentId"     -> conflictingParentId,
                 "parentName"   -> conflictingParentName,
                 "bundledTasks" -> e.conflictingLock.bundledTasks,
-                "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString)
+                "startedAt"    -> e.conflictingLock.lockedTime.map(_.toString),
+                "error"        -> ErrorCodes.LockedByOther
               )
             )
         }
@@ -486,6 +506,13 @@ class TaskController @Inject() (
   }
 
   /**
+    * When the lock covering the task expires, as an ISO-8601 UTC timestamp. Best effort:
+    * a failed lookup leaves the field null rather than failing the lock request.
+    */
+  private def lockExpiresAt(task: Task): Option[String] =
+    Try(this.dal.resolveLockExpiry(task, config.taskLockExpiry)).toOption.flatten.map(_.toString)
+
+  /**
     * Refresh the active lock on the task, extending its allowed duration
     *
     * @param taskId    Id of the task on which the lock is to be refreshed
@@ -502,14 +529,22 @@ class TaskController @Inject() (
             Ok(
               Json.toJson(t).as[JsObject] ++ Json.obj(
                 "lockPrimaryTaskId" -> lockPrimaryTaskId,
-                "lockBundledTasks"  -> lockBundledTasks
+                "lockBundledTasks"  -> lockBundledTasks,
+                "expiresAt"         -> this.lockExpiresAt(t)
               )
             )
           } catch {
-            case e: LockedException => throw new IllegalAccessException(e.getMessage)
+            case e: LockedException =>
+              e.errorCode match {
+                case Some(code) => throw new CodedIllegalAccessException(e.getMessage, code)
+                case None       => throw new IllegalAccessException(e.getMessage)
+              }
           }
         case None =>
-          throw new NotFoundException(s"Task with $taskId not found, unable to refresh lock.")
+          throw new NotFoundException(
+            s"Task with $taskId not found, unable to refresh lock.",
+            Some(ErrorCodes.NotFound)
+          )
       }
     }
   }
@@ -962,7 +997,11 @@ class TaskController @Inject() (
     }
     val task = this.dal.retrieveById(taskId) match {
       case Some(t) => t
-      case None    => throw new NotFoundException(s"Task with $taskId not found, can not set status.")
+      case None =>
+        throw new NotFoundException(
+          s"Task with $taskId not found, can not set status.",
+          Some(ErrorCodes.NotFound)
+        )
     }
 
     // Resolve the lock's bundle membership before setTaskStatus releases it as a side

@@ -9,9 +9,9 @@ import java.sql.Connection
 import anorm._
 
 import java.sql.PreparedStatement
-import org.joda.time.DateTime
+import org.joda.time.{DateTime, DateTimeZone}
 import org.maproulette.data.ItemType
-import org.maproulette.exception.{LockConflictException, LockedException}
+import org.maproulette.exception.{ErrorCodes, LockConflictException, LockedException}
 import org.maproulette.framework.model.{Task, User}
 import org.maproulette.framework.psql.TransactionManager
 import org.maproulette.models.{BaseObject, Lock}
@@ -99,10 +99,15 @@ trait Locking[T <: BaseObject[_]] extends TransactionManager {
               .executeUpdate()
           } else {
             throw new LockedException(
-              s"Item ${item.id} currently locked by user ${id}"
+              s"Item ${item.id} currently locked by user ${id}",
+              Some(ErrorCodes.LockedByOther)
             )
           }
-        case None => throw new LockedException(s"Lock on item ${item.id} does not exist.")
+        case None =>
+          throw new LockedException(
+            s"Lock on item ${item.id} does not exist.",
+            Some(ErrorCodes.LockRequired)
+          )
       }
     }
 
@@ -183,6 +188,34 @@ trait Locking[T <: BaseObject[_]] extends TransactionManager {
           (SqlParser.long("item_id") ~ SqlParser.get[List[Long]]("bundled_tasks")).singleOpt
         )
         .map { case primaryItemId ~ bundledTasks => (primaryItemId, bundledTasks) }
+    }
+
+  /**
+    * Resolves when the lock covering the given item (primary or bundle member) expires:
+    * its locked_time plus the configured expiry. The remaining time is computed in the
+    * database, so the result does not depend on the JVM and database time zones agreeing.
+    * Expired locks are removed by a periodic job, so a lock can outlive this time.
+    *
+    * @param item   The item (primary or bundle member) to resolve the covering lock for
+    * @param expiry The lock expiry as a PostgreSQL interval, e.g. "1 hour"
+    * @param c      A sql connection implicitly passed in from the calling function
+    * @return Some(expiry time in UTC) if a lock covers the item, else None
+    */
+  def resolveLockExpiry(item: T, expiry: String)(
+      implicit c: Option[Connection] = None
+  ): Option[DateTime] =
+    this.withMRTransaction { implicit c =>
+      SQL(
+        s"""SELECT EXTRACT(EPOCH FROM (locked_time + CAST({expiry} AS INTERVAL)) - NOW()::timestamp)::float8
+              AS remaining
+            FROM locked
+            WHERE (item_id = {itemId} OR {itemId} = ANY(bundled_tasks)) AND item_type = ${item.itemType.typeId}"""
+      ).on(
+          Symbol("itemId") -> ParameterValue.toParameterValue(item.id)(p = keyToStatement),
+          Symbol("expiry") -> expiry
+        )
+        .as(SqlParser.double("remaining").singleOpt)
+        .map(remaining => DateTime.now(DateTimeZone.UTC).plusMillis((remaining * 1000).toInt))
     }
 
   /**

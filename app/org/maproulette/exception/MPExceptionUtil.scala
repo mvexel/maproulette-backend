@@ -5,7 +5,7 @@
 package org.maproulette.exception
 
 import org.slf4j.LoggerFactory
-import play.api.libs.json.{JsString, Json}
+import play.api.libs.json.{JsObject, JsString, Json}
 import play.api.mvc.Result
 import play.api.mvc.Results._
 import play.shaded.oauth.oauth.signpost.exception.OAuthNotAuthorizedException
@@ -25,6 +25,19 @@ object MPExceptionUtil {
   private val internalErrorMessage = "An unexpected error occurred"
 
   /**
+    * Legacy StatusMessage body, plus an `error` field when the exception carries a
+    * machine-readable code. Existing fields are unchanged.
+    */
+  def body(status: String, e: Throwable): JsObject = {
+    val base = Json.toJson(StatusMessage(status, JsString(e.getMessage))).as[JsObject]
+    e match {
+      case coded: ErrorCoded =>
+        coded.errorCode.fold(base)(code => base + ("error" -> JsString(code)))
+      case _ => base
+    }
+  }
+
+  /**
     * Used for Actions, wraps the code block and if InvalidException found will send a BadRequest,
     * all other exceptions sent back as InternalServerError
     *
@@ -37,13 +50,13 @@ object MPExceptionUtil {
     } catch {
       case e: InvalidException =>
         logger.error(e.getMessage, e)
-        BadRequest(Json.toJson(StatusMessage("KO", JsString(e.getMessage))))
+        BadRequest(body("KO", e))
       case e: IllegalAccessException =>
         logger.error(e.getMessage)
-        Forbidden(Json.toJson(StatusMessage("Forbidden", JsString(e.getMessage))))
+        Forbidden(body("Forbidden", e))
       case e: NotFoundException =>
         logger.error(e.getMessage, e)
-        NotFound(Json.toJson(StatusMessage("NotFound", JsString(e.getMessage))))
+        NotFound(body("NotFound", e))
       case e: LockConflictException =>
         logger.debug(e.getMessage)
         Conflict(
@@ -51,12 +64,13 @@ object MPExceptionUtil {
             "status"       -> "Conflict",
             "message"      -> e.getMessage,
             "lockedTaskId" -> e.conflictingLock.itemId,
-            "bundledTasks" -> e.conflictingLock.bundledTasks
+            "bundledTasks" -> e.conflictingLock.bundledTasks,
+            "error"        -> ErrorCodes.LockedByOther
           )
         )
       case e: LockedException =>
         logger.error(e.getMessage)
-        Forbidden(Json.toJson(StatusMessage("Forbidden", JsString(e.getMessage))))
+        Forbidden(body("Forbidden", e))
       case e: Exception =>
         logger.error(e.getMessage, e)
         InternalServerError(Json.toJson(StatusMessage("KO", JsString(internalErrorMessage))))
@@ -88,17 +102,17 @@ object MPExceptionUtil {
     e match {
       case e: InvalidException =>
         logger.error(e.getMessage, e)
-        BadRequest(Json.toJson(StatusMessage("KO", JsString(e.getMessage))))
+        BadRequest(body("KO", e))
       case e: OAuthNotAuthorizedException =>
         // When a user is not authorized, log it at debug level to avoid simple DoS with logging
         logger.debug(e.getMessage)
         Unauthorized(Json.toJson(StatusMessage("NotAuthorized", JsString(e.getMessage)))).withNewSession
       case e: IllegalAccessException =>
         logger.warn(e.getMessage)
-        Forbidden(Json.toJson(StatusMessage("Forbidden", JsString(e.getMessage))))
+        Forbidden(body("Forbidden", e))
       case e: NotFoundException =>
         logger.warn(e.getMessage)
-        NotFound(Json.toJson(StatusMessage("NotFound", JsString(e.getMessage))))
+        NotFound(body("NotFound", e))
       case e: LockConflictException =>
         logger.debug(e.getMessage)
         Conflict(
@@ -106,12 +120,13 @@ object MPExceptionUtil {
             "status"       -> "Conflict",
             "message"      -> e.getMessage,
             "lockedTaskId" -> e.conflictingLock.itemId,
-            "bundledTasks" -> e.conflictingLock.bundledTasks
+            "bundledTasks" -> e.conflictingLock.bundledTasks,
+            "error"        -> ErrorCodes.LockedByOther
           )
         )
       case e: LockedException =>
         logger.warn(e.getMessage)
-        Forbidden(Json.toJson(StatusMessage("Forbidden", JsString(e.getMessage))))
+        Forbidden(body("Forbidden", e))
       case e: ChangeConflictException =>
         logger.error(e.getMessage, e)
         Conflict(Json.toJson(StatusMessage("Conflict", JsString(e.getMessage))))

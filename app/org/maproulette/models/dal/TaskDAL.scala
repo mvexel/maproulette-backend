@@ -15,7 +15,13 @@ import org.joda.time.{DateTime, DateTimeZone}
 import org.locationtech.jts.geom.Envelope
 import org.maproulette.Config
 import org.maproulette.data._
-import org.maproulette.exception.{InvalidException, NotFoundException}
+import org.maproulette.exception.{
+  CodedIllegalAccessException,
+  ErrorCodes,
+  InternalServerException,
+  InvalidException,
+  NotFoundException
+}
 import org.maproulette.framework.model.{Challenge, Project, StatusActions, User, GrantTarget, Task}
 import org.maproulette.framework.psql.filter.{BaseParameter, SubQueryFilter}
 import org.maproulette.framework.psql.{Order, Paging, Query}
@@ -648,14 +654,18 @@ class TaskDAL @Inject() (
       throw new InvalidException("Must be at least one task in list to setTaskStatus.")
     }
     if (user.guest) {
-      throw new IllegalAccessException("Guest users cannot make edits to tasks.")
+      throw new CodedIllegalAccessException(
+        "Guest users cannot make edits to tasks.",
+        ErrorCodes.GuestNotAllowed
+      )
     }
 
     for (task <- tasks) {
       this.manager.challenge.retrieveById(task.parent) match {
         case Some(parentChallenge) if parentChallenge.extra.paused =>
           throw new InvalidException(
-            "This challenge is currently paused. Tasks cannot be completed until it is resumed."
+            "This challenge is currently paused. Tasks cannot be completed until it is resumed.",
+            Some(ErrorCodes.ChallengePaused)
           )
         case _ => // challenge not paused, or not found (shouldn't happen) - allow
       }
@@ -678,7 +688,10 @@ class TaskDAL @Inject() (
           status,
           allowReset
         )) {
-      throw new InvalidException("Invalid task status supplied.")
+      throw new InvalidException(
+        "Invalid task status supplied.",
+        Some(ErrorCodes.InvalidTransition)
+      )
     }
 
     var bundleUpdate = ""
