@@ -220,6 +220,11 @@ class SessionManager @Inject() (
     * @return A Future for an optional user, None if there is no valid session
     */
   def sessionUser(implicit request: RequestHeader): Future[Option[User]] = {
+    // Set only by the OAuth bearer filter, after scope and route validation.
+    request.attrs.get(org.maproulette.auth.oauth.OAuthBearerIdentity.UserKey) match {
+      case Some(user) => return Future.successful(Some(user))
+      case None       => // No bearer token: the session and development behavior below.
+    }
     devModeUser match {
       case Some(u) => Future.successful(Some(u))
       case None =>

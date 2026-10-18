@@ -2,6 +2,13 @@
 # This file defines all application routes (Higher priority routes first)
 # ~~~~
 GET     /ping                                                           @controllers.Application.ping
+# OAuth provider for native and desktop apps (off unless oauthProvider.enabled), see docs/oauth-provider.md
+GET     /oauth/authorize                                         @controllers.OAuthProviderController.authorize
+GET     /oauth/callback                                          @controllers.OAuthProviderController.callback
+POST    /oauth/consent                                           @controllers.OAuthProviderController.consent
+POST    /oauth/token                                             @controllers.OAuthProviderController.token
+POST    /oauth/revoke                                            @controllers.OAuthProviderController.revoke
+GET     /oauth/me                                                @controllers.OAuthProviderController.me
 # Authentication Routes
 GET     /auth/authenticate                                              @controllers.AuthController.authenticate(redirectUri: String ?= "")
 GET     /auth/callback                                                  @controllers.AuthController.callback(code: String, state: String)

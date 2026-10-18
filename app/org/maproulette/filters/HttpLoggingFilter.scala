@@ -12,6 +12,12 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext
 
 private[filters] object SafeRequestLog {
+
+  /** OAuth provider requests carry codes and state in the query string: log only the path. */
+  def request(request: RequestHeader): String =
+    if (request.path.startsWith("/oauth/")) s"${request.method} ${request.path}"
+    else request.toString()
+
   private val sensitiveHeaders = Set("authorization", "apikey", "cookie", "set-cookie", "referer")
 
   def headers(request: RequestHeader): String =
@@ -52,7 +58,7 @@ class HttpLoggingFilter @Inject() (
       accessLogger.info(
         "Request {} '{}' [{}] {}ms - Response {}",
         uuid,
-        requestHeader.toString(),
+        SafeRequestLog.request(requestHeader),
         action,
         requestTotalTime,
         result.header.status

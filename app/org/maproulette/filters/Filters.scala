@@ -16,5 +16,12 @@ class Filters @Inject() (
     routeHeaderFilter: RouteHeaderFilter,
     corsFilter: CORSFilter,
     gzipFilter: GzipFilter,
-    httpLoggingFilter: HttpLoggingFilter
-) extends DefaultHttpFilters(routeHeaderFilter, corsFilter, gzipFilter, httpLoggingFilter)
+    httpLoggingFilter: HttpLoggingFilter,
+    bearerFilter: org.maproulette.auth.oauth.OAuthBearerFilter
+) extends DefaultHttpFilters(
+      routeHeaderFilter,
+      corsFilter,
+      gzipFilter,
+      httpLoggingFilter,
+      bearerFilter
+    )

@@ -71,6 +71,7 @@ pipelineStages := Seq(gzip)
 routesGenerator := InjectedRoutesGenerator
 
 libraryDependencies ++= Seq(
+  "com.nulab-inc" %% "scala-oauth2-core" % "1.6.0",
   jdbc,
   jdbc % Test,
   ehcache,

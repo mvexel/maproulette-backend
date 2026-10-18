@@ -64,6 +64,15 @@ jobs:
           distribution: 'temurin'
           cache: sbt
       - uses: sbt/setup-sbt@v1
+      - name: Prepare disposable OAuth test database
+        env:
+          POSTGIS_CONTAINER: ${{ job.services.postgis.id }}
+        run: |
+          # Keep the schema-per-case OAuth repository tests apart from FrameworkMasterSuite's mr_test cleanup.
+          docker exec "$POSTGIS_CONTAINER" psql -U osm -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE oauth_ci OWNER osm'
+          docker exec "$POSTGIS_CONTAINER" psql -U osm -d oauth_ci -v ON_ERROR_STOP=1 \
+            -c 'CREATE EXTENSION postgis'
       - name: Run sbt tests with jacoco analysis
         env:
           APPLICATION_SECRET: ${{ needs.generate_app_secret.outputs.application_secret }}
@@ -71,6 +80,10 @@ jobs:
           MR_TEST_DB_NAME: "mr_test"
           MR_TEST_DB_USER: "osm"
           MR_TEST_DB_PASSWORD: "osm"
+          # Synthetic credentials for this job's disposable service only.
+          OAUTH_TEST_DATABASE_URL: "jdbc:postgresql://localhost:5432/oauth_ci"
+          OAUTH_TEST_DATABASE_USER: "osm"
+          OAUTH_TEST_DATABASE_PASSWORD: "osm"
         run: |
           sbt -Dsbt.log.format=false jacoco
 

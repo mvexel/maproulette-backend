@@ -19,5 +19,13 @@ class HttpLoggingFilterSpec extends PlaySpec {
       headers must include("Authorization=[redacted]")
       headers must include("Accept=application/json")
     }
+    "omit OAuth provider query strings" in {
+      val request = FakeRequest("GET", "/oauth/callback?code=secret-code&state=secret-state")
+      SafeRequestLog.request(request) mustBe "GET /oauth/callback"
+    }
+    "preserve ordinary route diagnostics" in {
+      val request = FakeRequest("GET", "/api/v2/task/123")
+      SafeRequestLog.request(request) mustBe request.toString()
+    }
   }
 }
