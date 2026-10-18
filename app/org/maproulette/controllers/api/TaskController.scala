@@ -880,25 +880,38 @@ class TaskController @Inject() (
   }
 
   /**
-    * Matches the task to a OSM Changeset, this will only
+    * Matches the task to a OSM Changeset. With a changesetId, links that changeset directly
+    * after checking it belongs to the user who fixed the task; without one, tries to match
+    * one of the user's changesets heuristically.
     *
-    * @param taskId the id for the task
+    * @param taskId      the id for the task
+    * @param changesetId optional id of the OSM changeset to link
     * @return The new Task object
     */
-  def matchToOSMChangeSet(taskId: Long): Action[AnyContent] = Action.async { implicit request =>
-    this.sessionManager.authenticatedFutureRequest { implicit user =>
-      this.dal.retrieveById(taskId) match {
-        case Some(t) =>
-          val promise = Promise[Result]()
-          this.dal.matchToOSMChangeSet(t, user, false) onComplete {
-            case Success(response) => promise success Ok(Json.toJson(t))
-            case Failure(error)    => promise failure error
-          }
-          promise.future
-        case None => throw new NotFoundException("Task not found to update taskId with")
+  def matchToOSMChangeSet(taskId: Long, changesetId: Option[Long]): Action[AnyContent] =
+    Action.async { implicit request =>
+      this.sessionManager.authenticatedFutureRequest { implicit user =>
+        this.dal.retrieveById(taskId) match {
+          case Some(t) =>
+            changesetId match {
+              case Some(id) =>
+                this.dal.linkOSMChangeSet(t, user, id).map(task => Ok(Json.toJson(task)))
+              case None =>
+                val promise = Promise[Result]()
+                this.dal.matchToOSMChangeSet(t, user, false) onComplete {
+                  case Success(response) => promise success Ok(Json.toJson(t))
+                  case Failure(error)    => promise failure error
+                }
+                promise.future
+            }
+          case None =>
+            throw new NotFoundException(
+              "Task not found to update taskId with",
+              Some(ErrorCodes.NotFound)
+            )
+        }
       }
     }
-  }
 
   def applyTagFix(taskId: Long, tags: String = ""): Action[JsValue] =
     Action.async(bodyParsers.json) { implicit request =>

@@ -856,7 +856,7 @@ GET     /taskTilesMvt/:z/:x/:y  @org.maproulette.framework.controller.TaskContro
 # tags: [ Task ]
 # operationId: task_update_task_changeset
 # summary: Update Task Changeset
-# description: Will update the changeset of the task. It will do this by attempting to match the OSM changeset to the Task based on the geometry and the time that the changeset was executed.
+# description: Will update the changeset of the task. With changesetId, links that changeset after checking that it is closed, belongs to the user who marked the task fixed, and was opened within a day of the fix. Without it, attempts to match one of the user's OSM changesets to the Task based on the geometry and the time that the changeset was executed.
 # responses:
 #   '200':
 #     description: The task that was updated. With the updated changeset value
@@ -864,16 +864,26 @@ GET     /taskTilesMvt/:z/:x/:y  @org.maproulette.framework.controller.TaskContro
 #       application/json:
 #         schema:
 #           $ref: '#/components/schemas/org.maproulette.framework.model.Task'
+#   '400':
+#     description: The task is not fixed, or the changeset is still open or was not opened near the time the task was fixed. The error field names the reason.
 #   '401':
 #     description: The user is not authorized to make this request
+#   '403':
+#     description: The user did not mark the task fixed, the changeset belongs to another user, or linking changesets is disabled on this server.
 #   '404':
-#     description: The task with the supplied ID was not found.
+#     description: The task or the changeset was not found.
 # parameters:
 #   - name: id
 #     in: path
 #     description: The ID of the task
+#   - name: changesetId
+#     in: query
+#     description: The ID of the OSM changeset to link. Omit to match a changeset heuristically.
+#     required: false
+#     schema:
+#       type: integer
 ###
-PUT     /task/:id/changeset                         @org.maproulette.controllers.api.TaskController.matchToOSMChangeSet(id:Long)
+PUT     /task/:id/changeset                         @org.maproulette.controllers.api.TaskController.matchToOSMChangeSet(id:Long, changesetId:Option[Long])
 ###
 # tags: [ Task ]
 # operationId: task_update_completion_responses

@@ -90,6 +90,10 @@ class Config @Inject() (implicit val configuration: Configuration) {
     this.config
       .getOptional[Boolean](Config.KEY_CHANGESET_ENABLED)
       .getOrElse(Config.DEFAULT_CHANGESET_ENABLED)
+  lazy val changeSetLinkEnabled: Boolean =
+    this.config
+      .getOptional[Boolean](Config.KEY_CHANGESET_LINK_ENABLED)
+      .getOrElse(Config.DEFAULT_CHANGESET_LINK_ENABLED)
   lazy val taskLockExpiry: String =
     this.config
       .getOptional[String](Config.KEY_TASK_LOCK_EXPIRY)
@@ -265,6 +269,7 @@ object Config {
   val KEY_RECENT_ACTIVITY                = s"$GROUP_MAPROULETTE.limits.activities"
   val KEY_CHANGESET_TIME_LIMIT           = s"$GROUP_MAPROULETTE.tasks.changesets.timeLimit"
   val KEY_CHANGESET_ENABLED              = s"$GROUP_MAPROULETTE.tasks.changesets.enabled"
+  val KEY_CHANGESET_LINK_ENABLED         = s"$GROUP_MAPROULETTE.tasks.changesets.linkEnabled"
   val KEY_MAX_SAVED_CHALLENGES           = s"$GROUP_MAPROULETTE.limits.saved"
   val KEY_SEMANTIC_VERSION               = s"$GROUP_MAPROULETTE.version"
   val KEY_SESSION_TIMEOUT                = s"$GROUP_MAPROULETTE.session.timeout"
@@ -391,6 +396,7 @@ object Config {
   val DEFAULT_VIRTUAL_CHALLENGE_EXPIRY                = "6 hours"
   val DEFAULT_CHANGESET_HOUR_LIMIT                    = "1 hour"
   val DEFAULT_CHANGESET_ENABLED                       = false
+  val DEFAULT_CHANGESET_LINK_ENABLED                  = true
   val DEFAULT_OSM_MATCHER_ENABLED                     = false
   val DEFAULT_OSM_MATCHER_MANUAL                      = false
   val DEFAULT_NOTIFICATION_IMMEDIATE_EMAIL_BATCH_SIZE = 10
