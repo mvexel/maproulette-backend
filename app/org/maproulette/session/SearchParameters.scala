@@ -30,7 +30,9 @@ case class SearchChallengeParameters(
     challengeStatus: Option[List[Int]] = None,
     requiresLocal: Option[Int] = Some(SearchParameters.CHALLENGE_REQUIRES_LOCAL_EXCLUDE),
     archived: Option[Boolean] = None,
-    global: Option[Boolean] = None
+    global: Option[Boolean] = None,
+    // `cct`: challenges.cooperative_type values (0 none, 1 tags, 2 change file)
+    challengeCooperativeTypes: Option[List[Int]] = None
 )
 
 case class SearchReviewParameters(
@@ -120,6 +122,16 @@ case class SearchParameters(
 }
 
 object SearchParameters {
+
+  /** `cct`: a comma-separated list of small non-negative integers; anything else is a 400. */
+  def parseCooperativeTypes(value: String): List[Int] = {
+    val items = value.split(",", -1).toList
+    if (items.isEmpty || items.size > 10 || !items.forall(_.matches("[0-9]{1,3}")))
+      throw new org.maproulette.exception.InvalidException(
+        "cct must be a comma-separated list of integers"
+      )
+    items.map(_.toInt).distinct
+  }
   val TASK_PROP_SEARCH_TYPE_EQUALS       = "equals"
   val TASK_PROP_SEARCH_TYPE_NOT_EQUAL    = "not_equal"
   val TASK_PROP_SEARCH_TYPE_CONTAINS     = "contains"
@@ -448,7 +460,12 @@ object SearchParameters {
         //includeArchived
         this.getBooleanParameter(request.getQueryString("ca"), params.challengeParams.archived),
         //includeGlobal
-        this.getBooleanParameter(request.getQueryString("cg"), params.challengeParams.global)
+        this.getBooleanParameter(request.getQueryString("cg"), params.challengeParams.global),
+        //challengeCooperativeTypes
+        request.getQueryString("cct") match {
+          case Some(v) => Some(SearchParameters.parseCooperativeTypes(v))
+          case None => params.challengeParams.challengeCooperativeTypes
+        }
       ),
       new SearchTaskParameters(
       //taskTags

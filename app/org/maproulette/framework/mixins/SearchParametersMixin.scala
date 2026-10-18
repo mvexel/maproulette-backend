@@ -39,6 +39,7 @@ trait SearchParametersMixin {
       this.filterTaskTags(params),
       this.filterPriority(params),
       this.filterChallengeDifficulty(params),
+      this.filterChallengeCooperativeType(params),
       this.filterChallengeStatus(params),
       this.filterChallengeRequiresLocal(params),
       this.filterBoundingGeometries(params),
@@ -588,6 +589,28 @@ trait SearchParametersMixin {
           Some("c")
         )
       )
+    )
+  }
+
+  /**
+    * Filters by c.cooperative_type (`cct`). Values are parsed integers, so they are inlined like
+    * the other integer list filters.
+    */
+  def filterChallengeCooperativeType(params: SearchParameters): FilterGroup = {
+    val types = params.challengeParams.challengeCooperativeTypes.getOrElse(List())
+    FilterGroup(
+      List(
+        BaseParameter(
+          "cooperative_type",
+          types.mkString(","),
+          Operator.IN,
+          false,
+          true,
+          Some("c")
+        )
+      ),
+      AND(),
+      types.nonEmpty
     )
   }
 

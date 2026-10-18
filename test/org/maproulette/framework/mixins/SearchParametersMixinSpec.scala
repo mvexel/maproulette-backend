@@ -253,6 +253,36 @@ class SearchParametersMixinSpec() extends PlaySpec with SearchParametersMixin {
     }
   }
 
+  "filterChallengeCooperativeType" should {
+    "match the cct list on the challenge's cooperative type" in {
+      val params = SearchParameters(challengeParams =
+        SearchChallengeParameters(challengeCooperativeTypes = Some(List(2)))
+      )
+      this.filterChallengeCooperativeType(params).sql() mustEqual "c.cooperative_type IN (2)"
+      this
+        .filterChallengeCooperativeType(
+          SearchParameters(challengeParams =
+            SearchChallengeParameters(challengeCooperativeTypes = Some(List(0, 1)))
+          )
+        )
+        .sql() mustEqual "c.cooperative_type IN (0,1)"
+    }
+
+    "be empty without cct" in {
+      this.filterChallengeCooperativeType(SearchParameters()).sql() mustEqual ""
+    }
+
+    "parse cct strictly" in {
+      SearchParameters.parseCooperativeTypes("2") mustEqual List(2)
+      SearchParameters.parseCooperativeTypes("0,2,2") mustEqual List(0, 2)
+      Seq("", "x", "3,", ",3", "3;1", "-1", "1.0", "3 ", "1234", "1,2,3,4,5,6,7,8,9,10,11")
+        .foreach { value =>
+          an[org.maproulette.exception.InvalidException] must be thrownBy
+            SearchParameters.parseCooperativeTypes(value)
+        }
+    }
+  }
+
   "filterChallengeDifficulty" should {
     "match on challenge difficulty" in {
       val params =
