@@ -20,9 +20,14 @@ trait TestDatabase {
     .configure(
       "db.default.url" -> s"jdbc:postgresql://${Properties.envOrElse("MR_TEST_DB_HOST", "localhost")}:${Properties
         .envOrElse("MR_TEST_DB_PORT", "5432")}/${Properties.envOrElse("MR_TEST_DB_NAME", "mr_test")}",
-      "db.default.username"            -> s"${Properties.envOrElse("MR_TEST_DB_USER", "osm")}",
-      "db.default.password"            -> s"${Properties.envOrElse("MR_TEST_DB_PASSWORD", "osm")}",
-      "db.default.logSql"              -> false,
+      "db.default.username" -> s"${Properties.envOrElse("MR_TEST_DB_USER", "osm")}",
+      "db.default.password" -> s"${Properties.envOrElse("MR_TEST_DB_PASSWORD", "osm")}",
+      "db.default.logSql"   -> false,
+      // The background pool copies db.default when the config is parsed, before these overrides.
+      "db.background.url" -> s"jdbc:postgresql://${Properties.envOrElse("MR_TEST_DB_HOST", "localhost")}:${Properties
+        .envOrElse("MR_TEST_DB_PORT", "5432")}/${Properties.envOrElse("MR_TEST_DB_NAME", "mr_test")}",
+      "db.background.username"         -> s"${Properties.envOrElse("MR_TEST_DB_USER", "osm")}",
+      "db.background.password"         -> s"${Properties.envOrElse("MR_TEST_DB_PASSWORD", "osm")}",
       "maproulette.osm.consumerKey"    -> "test",
       "maproulette.osm.consumerSecret" -> "test",
       "maproulette.bootstrap"          -> true
